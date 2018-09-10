@@ -197,3 +197,46 @@ turn to mState==OK
                 否则全设
 
         LoopClosing::CorrectLoop()
+            进入Correct Loop说明ComputeSim3中满足要求，有大于40个的匹配点
+            // Send a stop signal to Local Mapping
+            如果正在进行全局Bundle Adjustment，adbort it（这里的BA是Correct的操作）
+            等待Local Mapping完全停止
+            更新当前帧的链接，mpCurrentKF->UpdateConnections
+            对链接中的每一个关键帧，用相对位姿来更新它们，记录更新和没有更新过的位姿
+            获取CorrectedSim3的所有关键帧和位姿
+                获取关键帧对应所有的地图点
+                判断mnCorrectedByKF
+                    将地图点的WorldPos设置为更新后的位姿，更新mnCorrectedByKF,mnCorrectedReference
+                    更新地图点UpdateNormalAndDepth
+            用Sim3更新关键帧位姿
+                SetPose
+                UpdateConnections
+            进行Fusion
+                对每个mvpCurrentMatchedPoints
+                若当前帧中点不为空，用这个点替代mpCurrentKF中的相同下标点
+                    否则增加这个地图点，添加链接，计算描述子
+            SearchAndFUse(CorrectedSim3)
+                建立ORBmatcher matcher(0.8)
+                对传入的关键帧和位姿，
+                    进行matcher.Fuse(pKF,cvScw,mvpLoopMapPoints,4,vpReplacePoints)
+                    将可替换的点记录在vpReplacePoints中
+                    锁定mpMap->mMutexMapUpdate
+                    如果有需要替换的点，就进行Replace方法
+            建立双向的链接
+                拿到每个关键帧的链接关键帧，对它们在LoopConnnections中删除GetVectorCovisibleKeyFrame和mvpCurrentConnectedKFs的索引
+            图优化Optimizer::OptimizeEssentialGraph(mpMap,mpMatchedKF,mpCurrentKF,NonCorrectedSim3,CorrectedSim3,LoopConnections,mbFixScale)
+                建立g2o的求解器
+                优化每个关键帧的位姿
+                优化每个地图点的位置，更新地图点的normal和depth
+            对mpMap->InformNewBigChange()
+                mnBigChangeIdx++
+            增加loop的edge，keyFrame::AddLoopEdge
+                mbNotErase = true
+                mspLoopEdges.insert
+            启动一个新线程来进行全局的Global Bundle Adjustment
+                结束更新后，让每一个关键帧都从mtcwGBA恢复一次位姿
+                地图点也是
+            关闭Loop，释放Local mapping
+
+        LoopClosing::ResetIfRequested()
+            如果设置了mbResetRequested，清除mlpLoopKeyFrameQueue、mLastLoopKFid、mbResetRequested
